@@ -1144,3 +1144,480 @@ func main() {
 ```
 
 ### Mutation Methods
+- Note that in the above case when we define a method for a struct, we pass the struct itself as a receiver argument to the method
+- This is actually like passing values to the method
+- This means the original struct is copied over and a new struct is created which the method then operates on
+```go
+//Here we are creating a copy of the original struct
+func (u user) outputUserDetails() {
+	fmt.Println(u.firstName, u.lastName, u.birthDate, u.createdAt)
+}
+```
+- To mutate or change values defined in the original struct, we can pass the struct as a pointer
+```go
+//Here we are operating on the original struct
+func (u *user) outputUserDetails() {
+	fmt.Println(u.firstName, u.lastName, u.birthDate, u.createdAt)
+}
+```
+- A more detailed example is like:
+```go
+package main
+
+import "fmt"
+import "time"
+
+// Group related fields together
+type user struct {
+	firstName string
+	lastName  string
+	birthDate string
+	createdAt time.Time
+}
+
+func (u *user) outputUserDetails() {
+	fmt.Println(u.firstName, u.lastName, u.birthDate, u.createdAt)
+}
+
+func (u *user) clearUserName() {
+	//Here we are mutating the original struct
+	u.firstName = ""
+	u.lastName = ""
+}
+
+func main() {
+	firstName := getUserData("Please enter your first name: ")
+	lastName := getUserData("Please enter your last name: ")
+	birthdate := getUserData("Please enter your birthdate (MM/DD/YYYY): ")
+	var appUser user
+	appUser = user{
+		firstName: firstName,
+		lastName:  lastName,
+		birthDate: birthdate,
+		createdAt: time.Now(),
+	}
+	// ... do something awesome with that gathered data!
+	appUser.outputUserDetails()
+	appUser.clearUserName()
+	appUser.outputUserDetails()
+}
+
+//func outputUserDetails(u *user) {
+//	//Note we are not dereferencing the pointer here.
+//	//fmt.Println((*u).firstName, (*u).lastName, (*u).birthDate, (*u).createdAt)
+//	fmt.Println(u.firstName, u.lastName, u.birthDate, u.createdAt)
+//}
+
+func getUserData(promptText string) string {
+	fmt.Print(promptText)
+	var value string
+	fmt.Scan(&value)
+	return value
+}
+
+```
+### Using Creation/Constructor Functions
+- So a creation or constructor function is not really a special function in Go
+- It is just like any other function in Go which can return a struct after initializing it
+- Not only initialization, it can also serve as a central place to do validations for all the values we are creating the struct with
+- Just like we saw earlier, it can return a pointer to the struct as it will allow us to mutate the struct directly rather than its copy
+```go
+type user struct {
+firstName string
+lastName  string
+birthDate string
+createdAt time.Time
+}
+
+
+// Not a feature built in go, just a pattern/convention
+// Think of constructor functions
+func newUser(firstName, lastName, birthdate string) (*user, error) {
+//Can be used to do validations in one central place
+if firstName == "" || lastName == "" || birthdate == "" {
+return nil, errors.New("first name and Last name and birthdate must be provided")
+}
+
+return &user{
+firstName: firstName,
+lastName:  lastName,
+birthDate: birthdate,
+createdAt: time.Now(),
+}, nil
+}
+
+//Usage
+func main() {
+firstName := getUserData("Please enter your first name: ")
+lastName := getUserData("Please enter your last name: ")
+birthdate := getUserData("Please enter your birthdate (MM/DD/YYYY): ")
+var appUser *user
+appUser, err := newUser(firstName, lastName, birthdate)
+if err != nil {
+fmt.Println(err)
+return
+}
+// ... do something awesome with that gathered data!
+appUser.outputUserDetails()
+appUser.clearUserName()
+appUser.outputUserDetails()
+}
+
+func getUserData(promptText string) string {
+fmt.Print(promptText)
+var value string
+//Will scan the user input on the line only, i.e if enter key is pressed, the value is input as NULL
+fmt.Scanln(&value)
+return value
+}
+
+```
+
+## Structs, Packages and Imports
+- We can create a folder named user and copy-paste the user struct code along with its functions into a file called user.go
+- Hence, we can create a new package called user
+- The Uppercase naming convention doesn't just apply to the Struct name but also to all the fields in the struct
+```go
+package user
+
+import (
+	"errors"
+	"fmt"
+	"time"
+)
+
+// User struct: Group related fields together
+type User struct {
+	FirstName string
+	lastName  string
+	birthDate string
+	createdAt time.Time
+}
+
+func (u *User) OutputUserDetails() {
+	fmt.Println(u.FirstName, u.lastName, u.birthDate, u.createdAt)
+}
+
+func (u *User) ClearUserName() {
+	u.FirstName = ""
+	u.lastName = ""
+}
+
+// NewUser : Not a feature built in go, just a pattern/convention
+// Think of constructor functions
+func NewUser(firstName, lastName, birthdate string) (*User, error) {
+	//Can be used to do validations in one central place
+	if firstName == "" || lastName == "" || birthdate == "" {
+		return nil, errors.New("first name and Last name and birthdate must be provided")
+	}
+
+	return &User{
+		FirstName: firstName,
+		lastName:  lastName,
+		birthDate: birthdate,
+		createdAt: time.Now(),
+	}, nil
+}
+
+```
+- Now we can arrange the code in structs.go as follows:
+```go
+package main
+
+import (
+	"examples.com/structs/user"
+	"fmt"
+)
+
+func main() {
+	firstName := getUserData("Please enter your first name: ")
+	lastName := getUserData("Please enter your last name: ")
+	birthdate := getUserData("Please enter your birthdate (MM/DD/YYYY): ")
+	var appUser *user.User
+	
+	appUser = &user.User{
+		FirstName: firstName,
+	}
+	appUser, err := user.NewUser(firstName, lastName, birthdate)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	// ... do something awesome with that gathered data!
+	appUser.OutputUserDetails()
+	appUser.ClearUserName()
+	appUser.OutputUserDetails()
+}
+
+//func outputUserDetails(u *user) {
+//	//Note we are not dereferencing the pointer here.
+//	//fmt.Println((*u).firstName, (*u).lastName, (*u).birthDate, (*u).createdAt)
+//	fmt.Println(u.firstName, u.lastName, u.birthDate, u.createdAt)
+//}
+
+func getUserData(promptText string) string {
+	fmt.Print(promptText)
+	var value string
+	fmt.Scanln(&value)
+	return value
+}
+
+```
+
+### Exposing Constructors and a different constructor function name
+- We should not be exposing fields of the struct and expose only the constructor function.
+- It is convention to name the constructor function as just New()
+- Remember errors package? errors.New("Some Error").
+```go
+func New(firstName, lastName, birthdate string) (*User, error) {
+	//Can be used to do validations in one central place
+	if firstName == "" || lastName == "" || birthdate == "" {
+		return nil, errors.New("first name and Last name and birthdate must be provided")
+	}
+
+	return &User{
+		firstName: firstName,
+		lastName:  lastName,
+		birthDate: birthdate,
+		createdAt: time.Now(),
+	}, nil
+}
+```
+
+### Struct Embedding
+- Build a new Struct that builds upon an existing struct.
+- Struct has no classes and no inheritance
+- However, we can build a struct on top of another struct
+```go
+type User struct {
+	firstName string
+	lastName  string
+	birthDate string
+	createdAt time.Time
+}
+
+type Admin struct {
+	email    string
+	password string
+	User     User
+}
+
+//Create a constructor function for Admin Struct like this
+func NewAdmin(email, password string) (*Admin, error) {
+if email == "" || password == "" {
+return nil, errors.New("email and password must be provided")
+}
+return &Admin{
+email:    email,
+password: password,
+User: User{
+firstName: "ADMIN",
+lastName:  "ADMIN",
+birthDate: "---",
+createdAt: time.Now(),
+},
+}, nil
+}
+
+// We can use it like this
+admin, _ := user.NewAdmin("email@example.com", "test123")
+admin.User.OutputUserDetails()
+```
+- However, rather explicitly typing the "type" the embedded struct, we can use it anonymously as an **anonymous embedding**
+- We are able to directly access the methods or fields(if they are exposed(capital Letter naming)) of the anonymous embedded struct on the parent struct
+```go
+type User struct {
+	firstName string
+	lastName  string
+	birthDate string
+	createdAt time.Time
+}
+
+type Admin struct {
+	email    string
+	password string
+	User
+}
+
+//Now we can use it like this
+//We are able to directly access the methods of the anonymous embedded struct on the parent struct
+admin, _ := user.NewAdmin("email@example.com", "test123")
+admin.OutputUserDetails()
+```
+
+### Summary of Structs
+- It is a custom type that can group related fields and functions
+- We can create constructor functions to outsource the creation of structs in a reusable way and add validations
+- We can put structs in packages and casing matters
+- If we have a method that wants to edit a struct, we must pass the reference to the struct as a pointer
+- In constructor function, we create a pointer to the newly created struct.
+- We can also create structs based on other structs also called struct embeddings
+- Structs are a very important feature in Go and they are used a lot in writing Go code.
+
+### Creating other custom types and adding methods
+- In Go, we can not only use "type" keyword just to create structs, 
+- but it can also be used to assign an "alias" to other built-in types
+- Why this is required? 
+- This is required to create extension methods(just like C#) on built-in types
+- For example, lets use the type keyword to add an alias for built-in type:"string"
+- We can do this aliasing for int, float64 etc and even for more complex built in types.
+```go
+//alias
+type customString string
+
+//add an extension method by passing the type to a function
+func (str customString) log() {
+	fmt.Println(str)
+}
+
+//Use it like this
+var name customString = "John"
+name.log()
+```
+
+### Using Struct Tags
+- Struct Tags are metadata that can be added to struct fields
+- This is useful in case when we convert the struct to json as this is used by encoding/json package
+```go
+type Note struct {
+	Title     string `json:"title"`
+	Content   string `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
+```
+### Practice Project - Note-Taking App
+- We will develop a simple app that will take the user input as Note Title and Note Content
+- This will then display the note and also convert the note to json and save it to the file system
+- We will create a struct "note" and its related constructor, display() and save() functions
+- So for this we will create a separate package called note which will import into our main package
+- We will make use of encodings/json package to convert our struct "note" to json and then save it within a file using the "os" package
+- To read multi character input from the command line we will make use of bufio package
+```go
+//Code for Note Package
+package note
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+)
+
+type Note struct {
+	Title     string    `json:"title"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (note Note) Display() {
+	fmt.Printf("Title: %s, Content: %s, CreatedAt: %s\n", note.Title, note.Content, note.CreatedAt.Format(time.RFC3339))
+}
+
+func (note Note) Save() error {
+	filename := strings.ReplaceAll(note.Title, " ", "_")
+	filename = strings.ToLower(filename) + ".json"
+	//Convert data to json
+	//This package only converts to json the publicly available data
+	jsonText, err := json.Marshal(note)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filename, jsonText, 0644)
+}
+
+func New(title, content string) (Note, error) {
+
+	//Do validation
+	if title == "" || content == "" {
+		return Note{}, errors.New("Empty note")
+	}
+
+	return Note{
+		Title:     title,
+		Content:   content,
+		CreatedAt: time.Now(),
+	}, nil
+}
+
+```
+- Code for the main package is as follows:
+```go
+package main
+
+import (
+	"bufio"
+	"examples.com/NotetakingApp/note"
+	"fmt"
+	"os"
+	"strings"
+)
+
+func main() {
+	title, content := getNoteData()
+	//if err != nil {
+	//	fmt.Println(err)
+	//	return
+	//}
+
+	userNote, err := note.New(title, content)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	//Display User Note
+	userNote.Display()
+
+	//Save the file
+	err = userNote.Save()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println("Saved Note successfully")
+
+}
+
+func getNoteData() (string, string) {
+	title := getUserInput("Enter the Note Title")
+	//if err != nil {
+	//	fmt.Println(err)
+	//	return "", "", err
+	//}
+	content := getUserInput("Enter the Note Content")
+	//if err != nil {
+	//	fmt.Println(err)
+	//	return "", "", err
+	//}
+
+	return title, content
+}
+
+func getUserInput(prompt string) string {
+	fmt.Printf("%v ", prompt)
+	//Create a reader that listens on the command line
+	reader := bufio.NewReader(os.Stdin)
+	//rune in Go is a single character
+	text, err := reader.ReadString('\n')
+	if err != nil {
+		return ""
+	}
+
+	text = strings.TrimSuffix(text, "\n")
+	text = strings.TrimSuffix(text, "\r")
+	//fmt.Scan(&value)
+	//if value == "" {
+	//	return "", errors.New("User input is empty")
+	//}
+	return text
+}
+
+```
+
+## Interfaces and Generic Code
+- Interfaces help us to write more flexible code
+- ![img_48.png](img_48.png)
+

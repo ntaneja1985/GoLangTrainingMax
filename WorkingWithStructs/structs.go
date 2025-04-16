@@ -1,33 +1,38 @@
 package main
 
-import "fmt"
-import "time"
+import (
+	"examples.com/structs/user"
+	"fmt"
+)
 
-// Group related fields together
-type user struct {
-	firstName string
-	lastName  string
-	birthDate string
-	createdAt time.Time
-}
+type customString string
 
-func (u user) outputUserDetails() {
-	fmt.Println(u.firstName, u.lastName, u.birthDate, u.createdAt)
+func (str customString) log() {
+	fmt.Println(str)
 }
 
 func main() {
+	var name customString = "John"
+	name.log()
+
 	firstName := getUserData("Please enter your first name: ")
 	lastName := getUserData("Please enter your last name: ")
 	birthdate := getUserData("Please enter your birthdate (MM/DD/YYYY): ")
-	var appUser user
-	appUser = user{
-		firstName: firstName,
-		lastName:  lastName,
-		birthDate: birthdate,
-		createdAt: time.Now(),
+	var appUser *user.User
+	admin, _ := user.NewAdmin("email@example.com", "test123")
+	admin.OutputUserDetails()
+	//appUser = &user.User{
+	//	firstName: firstName,
+	//}
+	appUser, err := user.New(firstName, lastName, birthdate)
+	if err != nil {
+		fmt.Println(err)
+		return
 	}
 	// ... do something awesome with that gathered data!
-	appUser.outputUserDetails()
+	appUser.OutputUserDetails()
+	appUser.ClearUserName()
+	appUser.OutputUserDetails()
 }
 
 //func outputUserDetails(u *user) {
@@ -39,6 +44,6 @@ func main() {
 func getUserData(promptText string) string {
 	fmt.Print(promptText)
 	var value string
-	fmt.Scan(&value)
+	fmt.Scanln(&value)
 	return value
 }
