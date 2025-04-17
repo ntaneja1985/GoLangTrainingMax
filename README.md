@@ -1620,4 +1620,203 @@ func getUserInput(prompt string) string {
 ## Interfaces and Generic Code
 - Interfaces help us to write more flexible code
 - ![img_48.png](img_48.png)
+- Interfaces can be created anywhere in the Go file
+- We need to use the "type" keyword
+- An interface is contract that guarantees that a certain value, typically a Struct has a certain method.
+- Interface dont have a function body, It just has a function name with its return value
+- We also dont have to give the parameters of that function a name, just their type is required
+- We can add as many method signatures to interface in Go
+- If however, we have an interface with just one method, we have to name as the method name + "r" 
+- For eg. an interface with just one method Save() inside it is named saver
+```go
+//Define an interface
+type saver interface {
+	Save() error
+}
 
+//Use the interface
+func saveData(data saver) error {
+err := data.Save()
+if err != nil {
+fmt.Println(err)
+return err
+}
+return nil
+}
+
+//For our note taking app for userNote and todo we can implement it as follows
+
+//Save the user note
+err = saveData(userNote)
+if err != nil {
+return
+}
+
+//Save the todo
+err = saveData(todo)
+if err != nil {
+return
+}
+
+```
+- Note that in Go, the above code will automatically work for todos and notes
+- This is because unlike other programming languages, we dont necessarily need to explicitly declare that a struct implements a particular interface
+- Go automatically looks at the method signature and finds that if the given struct being passed to it, implements the methods defined by the interface, it automatically works
+- ![img_49.png](img_49.png)
+- This enables us to write more generic code automatically
+
+### Embedded Interfaces
+- We can create compound interfaces where we can combine other interfaces with other methods
+- The only requirement for this is work automatically is that struct must implement all methods of that compound interface as well as any method defined in the embedded interface
+```go
+type outputtable interface {
+	saver //Embedded interface
+	Display()
+	//DoSomething(int) string
+}
+
+type saver interface {
+Save() error
+}
+
+func outputData(data outputtable) error {
+data.Display()
+return saveData(data)
+}
+
+func saveData(data saver) error {
+err := data.Save()
+if err != nil {
+fmt.Println(err)
+return err
+}
+return nil
+}
+
+//Now we can condense our code for userNote and todo as follows
+
+//Output the userNote
+err = outputData(userNote)
+if err != nil {
+fmt.Println(err)
+return
+}
+fmt.Println("Saved Note successfully")
+
+//Output the todo
+err = outputData(todo)
+if err != nil {
+fmt.Println(err)
+return
+}
+fmt.Println("Saved Todo successfully")
+```
+- ![img_50.png](img_50.png)
+
+### The special "Any value allowed" type
+- Go has a special "any" type which can accept any kind of input
+- We can either specify it using "any" keyword or empty interface like interface {}
+- Similar to "any" keyword in typescript
+```go
+//This can be dangerous though
+printSomething("Some string")
+printSomething(1)
+
+// value can be of any type
+// Even Println() accepts any type
+func printSomething(value interface{}) {
+	fmt.Println(value)
+}
+```
+### Working with type Switches
+- Similar to reflection in C#, we can use "type" keyword to get the type of "any" value that is being passed to the function
+```go
+func printSomething(value interface{}) {
+	switch value.(type) {
+	case int:
+		fmt.Println("Integer: ", value)
+	case string:
+		fmt.Println("String: ", value)
+	case float64:
+		fmt.Println("Float: ", value)
+	default:
+		fmt.Println("Unknown type: ", value)
+	}
+}
+
+printSomething("Some string")
+printSomething(1)
+printSomething(1.5)
+```
+### Extracting Type Information From Values
+- The previous value.(type) has a limitation that it can used only within a switch statement
+- Alternative to that is to use value(.string) or value(.int)
+- It returns the value and also an "ok" boolean which indicates if it is of the specified type
+```go
+func printSomething(value interface{}) {
+intVal, ok := value.(int)
+if ok {
+intVal = intVal + 1
+fmt.Println("Integer: ", intVal)
+return
+}
+floatVal, ok := value.(float64)
+if ok {
+floatVal = floatVal + 1
+fmt.Println("Float: ", intVal)
+return
+}
+
+stringVal, ok := value.(string)
+if ok {
+fmt.Println("String: ", stringVal)
+return
+}
+}
+```
+
+### Interfaces, Dynamic Types and Limitations
+- Look at the following code:
+- This is a lot of code to write, we need to check the type and return accordingly
+- TO prevent this, Go offers Generics
+```go
+func add(a, b interface{}) any {
+	aInt, aIsInt := a.(int)
+	bInt, bIsInt := b.(int)
+
+	if aIsInt && bIsInt {
+		return aInt + bInt
+	}
+
+	aFloat, aIsFloat := a.(float64)
+	bFloat, bIsFloat := b.(float64)
+
+	if aIsFloat && bIsFloat {
+		return aFloat + bFloat
+	}
+
+	aStr, aIsStr := a.(string)
+	bStr, bIsStr := b.(string)
+
+	if aIsStr && bIsStr {
+		return aStr + bStr
+	}
+
+	return a
+}
+```
+### Generics in Go
+- In the above code, we saw how difficult it is to determine the type of value and do operations accordingly
+- Go provides us with a generics feature which we can use like this using square brackets []
+- Here we can also define that generics can be typeof int, float64 or string type
+```go
+func addGenerics[T int | float64 | string](a, b T) T {
+	return a + b
+}
+
+//Go will figure out the return type of this function will be int
+result := addGenerics(1, 2)
+fmt.Println(result)
+
+```
+## Managing Related Data with Arrays, Slices and Maps
