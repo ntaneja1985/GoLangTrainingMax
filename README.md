@@ -1820,3 +1820,392 @@ fmt.Println(result)
 
 ```
 ## Managing Related Data with Arrays, Slices and Maps
+- Struct allows us to bundle different pieces of data together to use it as one single value
+- Now we will look at collections
+- ![img_51.png](img_51.png)
+- These collections help us to group data together and manage lists of data
+- ![img_53.png](img_53.png)
+- An array that holds different values for the same thing
+- We can create arrays of built in types as well as custom types like structs
+- Even nested arrays are possible
+```go
+package main
+
+import "fmt"
+
+type Product struct {
+	title string
+	id    string
+	price float64
+}
+
+func main() {
+	var productNames [4]string = [4]string{"1", "2", "3"}
+	productNames[3] = "4"
+	prices := [4]float64{10.99, 9.99, 45.99, 20.0}
+	fmt.Println(productNames)
+	fmt.Println(prices[2])
+}
+
+```
+### Selecting parts of Array with Slices
+- Slices allow us to create new lists based on other lists of data
+```go
+func main() {
+	var productNames [4]string = [4]string{"1", "2", "3"}
+	productNames[3] = "4"
+	prices := [4]float64{10.99, 9.99, 45.99, 20.0}
+	fmt.Println(productNames)
+	fmt.Println(prices[2])
+
+	//Start with the first element at the index 1(include element at index 1)
+	//and go upto index 3 and exclude element at index 3, so this will have only 2 values
+	featuredPrices := prices[1:3]
+	fmt.Println(featuredPrices)
+}
+```
+- We can do even more with slices like this
+- Slices can be based on other slices also
+```go
+func main() {
+	var productNames [4]string = [4]string{"1", "2", "3"}
+	productNames[3] = "4"
+	prices := [4]float64{10.99, 9.99, 45.99, 20.0}
+	fmt.Println(productNames)
+	fmt.Println(prices[2])
+
+	//Start with the first element at the index 1(include element at index 1)
+	//and go upto index 3 and exclude element at index 3, so this will have only 2 values
+	featuredPrices := prices[1:3]
+	fmt.Println(featuredPrices)
+
+	//We can omit the starting index and write the ending index
+	//This will start from the first index i.e 0 and go all the way upto index 3
+	//and exclude the element at index 3
+	newPrices := prices[:3]
+	fmt.Println(newPrices)
+
+	//Can do opposite also
+	//Start with element at index 1 and go all the way upto the end element
+	testPrices := prices[1:]
+	fmt.Println(testPrices)
+
+	//Using highest bound in a slice
+	//Go has a special feature where we can go upto lastIndex + 1
+	//This allows us to include the last element in the slice also(remember element at ending index is excluded)
+	includeLastElementPrices := prices[1:4]
+	fmt.Println(includeLastElementPrices)
+
+	//Slices can be used on arrays, but they can also be based on other slices
+	firstSlice := prices[1:]      //Returns [9.99, 45.99, 20.0]
+	secondSlice := firstSlice[:1] //Returns [9.99]
+	fmt.Println(secondSlice)
+}
+```
+#### Slices are a reference/window into an array bit like a pointer
+- When we create an array, that array is stored in memory
+- When we then create a slice from that array, we get a window into that array
+- So, if we modify an element in a slice, we would also modify the same element in the original array
+```go
+//Slices can be used on arrays, but they can also be based on other slices
+	fmt.Println("Original Prices array: ", prices) //Returns [10.99 9.99 45.99 20]
+	firstSlice := prices[1:]                       //Returns [9.99, 45.99, 20.0]
+	fmt.Println("First Slice: ", firstSlice)
+	secondSlice := firstSlice[:1] //Returns [9.99]
+	fmt.Println("Second Slice: ", secondSlice)
+	secondSlice[0] = 17.99
+	fmt.Println("Second Slice after modification: ", secondSlice)
+	fmt.Println("Original Prices array second time after modification: ", prices)
+```
+- ![img_54.png](img_54.png)
+- When we create a slice, we dont create a copy of the original array, so we dont have that copy in memory which occupies extra space
+- Instead, we still have only one array in memory and our slice is just a tiny reference to that part of that array
+- Slicing is a very **memory efficient technique** to select parts of an array
+- GO also saves some metadata for our slices, For every slice, we get length and capacity
+- Length gives us the number of items in the array/slice
+- Capacity 
+```go
+//Slices can be used on arrays, but they can also be based on other slices
+	fmt.Println("Original Prices array: ", prices) //Returns [10.99 9.99 45.99 20]
+	firstSlice := prices[1:]                       //Returns [9.99, 45.99, 20.0]
+	fmt.Println("First Slice: ", firstSlice)
+	secondSlice := firstSlice[:1] //Returns [9.99]
+	fmt.Println("Second Slice: ", secondSlice)
+	secondSlice[0] = 17.99
+	fmt.Println("Second Slice after modification: ", secondSlice)
+	fmt.Println("Original Prices array second time after modification: ", prices)
+	fmt.Println("Length of first slice: ", len(firstSlice))
+	fmt.Println("Capacity of first slice: ", cap(firstSlice))
+
+```
+- Look at this code
+```go
+//Slices can be used on arrays, but they can also be based on other slices
+fmt.Println("Original Prices array: ", prices) //Returns [10.99 9.99 45.99 20]
+firstSlice := prices[1:]                       //Returns [9.99, 45.99, 20.0]
+fmt.Println("First Slice: ", firstSlice)
+secondSlice := firstSlice[:1] //Returns [9.99]
+fmt.Println("Second Slice: ", secondSlice)
+secondSlice[0] = 17.99
+fmt.Println("Second Slice after modification: ", secondSlice)
+fmt.Println("Original Prices array second time after modification: ", prices)
+fmt.Println("Length of first slice: ", len(firstSlice)) //Gives 3
+fmt.Println("Capacity of first slice: ", cap(firstSlice)) //Gives 3
+fmt.Println("Length of second slice: ", len(secondSlice)) //Gives 1
+fmt.Println("Capacity of second slice: ", cap(secondSlice)) //Gives 3
+	
+```
+- Capacity refers to the maximum number of elements the slice can hold without needing to reallocate.
+- Length gives the number of elements currently present.
+- Capacity gives the total space available for elements before reallocation becomes necessary.
+
+- Refer to the following code:
+```go
+	prices := [4]float64{10.99, 9.99, 45.99, 20.0}
+randomFirstSlice := prices[0:4]
+fmt.Println("Random First Slice: ", randomFirstSlice)
+fmt.Println("Length of random first slice: ", len(randomFirstSlice))
+fmt.Println("Capacity of random first slice: ", cap(randomFirstSlice))
+randomSecondSlice := randomFirstSlice[1:]
+fmt.Println("Random Second Slice: ", randomSecondSlice)
+fmt.Println("Length of random second slice: ", len(randomSecondSlice))
+fmt.Println("Capacity of random second slice: ", cap(randomSecondSlice))
+randomThirdSlice := randomFirstSlice[:1]
+fmt.Println("Random Third Slice: ", randomThirdSlice)
+fmt.Println("Length of random third slice: ", len(randomThirdSlice))
+fmt.Println("Capacity of random third slice: ", cap(randomThirdSlice))
+```
+- ![img_55.png](img_55.png)
+- Note the length of the third slice is 1, but its capacity is 4 because it is built off randomFirstSlice and it has 4 elements it can select from
+- Also note, capacity starts from the first element to the last element in the slice off it is based on
+- We can select more elements to the right rather than to the left
+- A slice in Go is a view over an underlying array. It is defined by three components:
+- A pointer to the start of the slice in the underlying array.
+- The length (len), which determines the number of accessible elements.
+- The capacity (cap), which determines how many elements the underlying array can hold starting from the slice’s pointer.
+
+### Building Dynamic Lists with Slices
+- Slices help us to create dynamic arrays
+- We cannot always set the length of the array in advance
+- In javascript, we always have dynamic arrays
+- In Go, we cannot do that
+- Solution in Go is by using slices
+- When we create a slice, Go automatically creates an underlying array for us
+- There is method append() to add elements to a slice and create a new slice or modify the existing slice
+- There is no method to remove elements from a slice, since we can always slice a slice :)
+```go
+func main() {
+	//Go automatically creates a slice for us and it also creates an underlying array
+	//Here prices is a slice
+	prices := []float64{10.99, 8.99}
+	fmt.Println(prices[1])
+	fmt.Println(prices[0:1])
+	prices[1] = 9.99
+	//Throws errors as we cannot access indexes that dont exist
+	//prices[2] = 11.99
+
+	//Append function not only adds the element to the slice but also to the underlying array
+	updatedPrices := append(prices, 14.99)
+	//Note the original slice doesnot change, to do that we have to do prices = append(prices,14.99)
+	//Also note that the underlying array is automatically updated by Go
+	//It is typical to work with slices in Go rather than use arrays
+	//If we are sure about the number of the elements in the list, go for arrays
+	fmt.Println(updatedPrices, prices)
+
+	//Remove the elements
+	//No function as such to remove elements since we already have slices
+	prices = prices[1:]
+	fmt.Println(prices)
+}
+```
+## Practice Project
+```go
+// Time to practice what you learned!
+
+// 1) Create a new array (!) that contains three hobbies you have
+// 		Output (print) that array in the command line.
+// 2) Also output more data about that array:
+//		- The first element (standalone)
+//		- The second and third element combined as a new list
+// 3) Create a slice based on the first element that contains
+//		the first and second elements.
+//		Create that slice in two different ways (i.e. create two slices in the end)
+// 4) Re-slice the slice from (3) and change it to contain the second
+//		and last element of the original array.
+// 5) Create a "dynamic array" that contains your course goals (at least 2 goals)
+// 6) Set the second goal to a different one AND then add a third goal to that existing dynamic array
+// 7) Bonus: Create a "Product" struct with title, id, price and create a
+//		dynamic list of products (at least 2 products).
+//		Then add a third product to the existing list of products.
+```
+- Solution is as follows:
+```go
+type Product struct {
+	title string
+	id    string
+	price float64
+}
+
+func main() {
+	hobbies := [3]string{"Cricket", "Coding", "Azure"}
+	fmt.Println("Hobbies: ", hobbies)
+	fmt.Println("First element of Hobbies: ", hobbies[0])
+	fmt.Println("Second and third element of Hobbies: ", hobbies[1:3])
+	fmt.Println("First and third element of Hobbies: ", [2]string{hobbies[0], hobbies[2]})
+	hobbiesSlice := hobbies[0:2]
+	hobbiesSliceAnotherWay := hobbies[:2]
+	fmt.Println(hobbiesSlice)
+	fmt.Println(hobbiesSliceAnotherWay)
+	hobbiesSlice = hobbies[1:]
+	fmt.Println(hobbiesSlice)
+
+	goals := []string{"Father", "Solution Architect"}
+	fmt.Println(goals)
+	goals[1] = "Azure Solution Architect"
+	fmt.Println(goals)
+	goals = append(goals, "Excellent Father")
+	fmt.Println(goals)
+
+	products := []Product{
+		{title: "Simple Product 1", id: "1", price: 10},
+		{title: "Simple Product 2", id: "2", price: 20},
+	}
+	fmt.Println(products)
+	products = append(products, Product{
+		title: "Simple Product 3",
+		id:    "3",
+		price: 30,
+	})
+	fmt.Println(products)
+}
+```
+
+## Unpacking List Values
+- Sometimes you have an existing Slice and you want to append another Slice or array to it.
+- What if we want to add a list of float64 to another list of float64
+- We cannot do it directly using the append() function as it can add only one value to a list of values
+- So we use a special operator(similar to spread operator in Javascript) to spread open our second list and add its elements one by one to the first list
+
+```go
+prices := []float64{10.99, 8.99}
+prices = prices[1:] //Gives 8.99
+discountPrices := []float64{101.99, 80.99, 20.59}
+prices = append(prices, discountPrices...)
+fmt.Println(prices) //gives 8.99,101.99,80.99,20.59
+```
+
+## Introducing Maps
+- Maps are used to group data together
+- In Maps we have Key-Value pairs
+- It is similar to Dictionary in C# or Map() in Javascript
+```go
+func MainMap() {
+//websites := []string{"google.com", "aws.com", "azure.com"}
+//fmt.Println(websites)
+websitesMap := map[string]string{
+"google": "google.com",
+"aws":    "aws.com",
+"azure":  "azure.com",
+"github": "github.com",
+}
+fmt.Println(websitesMap["github"])
+websitesMap["LinkedIn"] = "linkedin.com"
+fmt.Println(websitesMap["LinkedIn"])
+
+//Delete a key
+delete(websitesMap, "LinkedIn")
+fmt.Println(websitesMap)
+}
+```
+
+### Maps vs Structs
+- In Maps, we can use anything for keys
+- We can even have an integer, array or struct as a key
+- This gives us more flexibility
+- In Structs, we have predefined data structures
+- We cannot at runtime in structs add a key-value pair
+- We also cannot delete a key-value pair from it
+- Struct should be used when we have clearly defined kinds of data that should have exactly the same shape
+- When we have a collection of values, and we want to have custom labels,map is our data structure of choice
+- Think of maps as arrays where we dont use indexes, but any labels of our choice
+
+### Using the special "make" function
+- Using the make function we can define the length and capacity of the array we are making
+- Note, that if the capacity is 5 and, we append the 6th element, i.e now the array length is 6, then capacity increases by 5
+- So now length of array is 6 and capacity is 10
+```go
+userNames := make([]string, 2, 5)
+
+	userNames[0] = "William Shakespeare"
+	userNames[1] = "John"
+	userNames = append(userNames, "Jane")
+	userNames = append(userNames, "Max")
+	userNames = append(userNames, "Max")
+	userNames = append(userNames, "Max")
+	userNames = append(userNames, "Max")
+	userNames = append(userNames, "Max")
+	fmt.Println(userNames)
+	fmt.Println(len(userNames))
+	fmt.Println(cap(userNames))
+	userNames = append(userNames, "Max")
+	userNames = append(userNames, "Max")
+	userNames = append(userNames, "Max")
+	fmt.Println(len(userNames))
+	fmt.Println(cap(userNames))
+```
+### "make"ing Maps
+- We can just specify the length while using the make() function and not the capacity
+- This allows Go to pre-allocate memory for the map
+```go
+//For maps, we can use make function and just specify the length of the map so that Go can pre-allocate memory
+	//This makes it a bit more efficient
+	courseRatings := make(map[string]float64, 5)
+	courseRatings["go"] = 4.7
+	courseRatings["react"] = 4.8
+	fmt.Println(courseRatings)
+```
+### Working with type aliases
+- For this code: map[string]float64, we have to type a lot.
+- We can make it shorter by using type aliases like this
+```go
+type floatMap map[string]float64
+
+func (f floatMap) output() {
+	fmt.Println(f)
+}
+
+//courseRatings := make(map[string]float64, 5)
+courseRatings := make(floatMap, 5)
+courseRatings["go"] = 4.7
+courseRatings["react"] = 4.8
+courseRatings.output()
+```
+
+### For loops with Arrays, Slices and Maps
+- We always have a requirement to iterate over arrays, slices and maps
+- This is similar to "foreach" keyword in C#, we have an equivalent keyword in Go called "range"
+```go
+courseRatings := make(floatMap, 5)
+courseRatings["go"] = 4.7
+courseRatings["react"] = 4.8
+
+userNames := make([]string, 2, 5)
+userNames[0] = "William Shakespeare"
+userNames[1] = "John"
+
+//If we dont care about individual item values or indexes, we can also just write for range userNames
+	for index, value := range userNames {
+		//fmt.Println(index)
+		//fmt.Println(value)
+		fmt.Println(userNames[index])
+		fmt.Println(value)
+		fmt.Println(value == userNames[index])
+	}
+
+	for key := range courseRatings {
+		//fmt.Println(key)
+		//fmt.Println(value)
+		fmt.Println(courseRatings[key])
+	}
+```
+
