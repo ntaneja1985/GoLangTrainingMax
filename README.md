@@ -2209,3 +2209,212 @@ userNames[1] = "John"
 	}
 ```
 
+## Functions (Deep Dive)
+- We will explore advanced function related features
+- ![img_56.png](img_56.png)
+- Functions are first class values in Go
+- We can use functions themselves as parameter values for other functions
+- This is similar to delegates in C# or Action or Func keyword in C#
+- We can also do type aliasing of functions
+```go
+package main
+
+import "fmt"
+
+type transformFn func(int) int
+
+func main() {
+	numbers := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	doubled := transformNumbers(&numbers, double)
+	tripled := transformNumbers(&numbers, triple)
+	fmt.Println(doubled)
+	fmt.Println(tripled)
+}
+
+func transformNumbers(numbers *[]int, transform transformFn) []int {
+	dNumbers := []int{}
+	for _, value := range *numbers {
+		dNumbers = append(dNumbers, transform(value))
+	}
+	return dNumbers
+}
+
+func double(number int) int {
+	return number * 2
+}
+
+func triple(number int) int {
+	return number * 3
+}
+
+```
+### Returning Functions as values
+- We can return functions as values from the result of a function
+```go
+func getTransformerFunction() transformFn {
+	return double
+}
+
+func getTransformerFunctionWithNumbers(numbers *[]int) transformFn {
+if (*numbers)[0] == 1 {
+return double
+} else {
+return triple
+}
+}
+
+numbers := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+moreNumbers := []int{11, 12, 13, 14}
+
+transformerFn1 := getTransformerFunctionWithNumbers(&numbers)
+transformerFn2 := getTransformerFunctionWithNumbers(&moreNumbers)
+
+transformedNumbers := transformNumbers(&numbers, transformerFn1)
+moreTransformedNumbers := transformNumbers(&moreNumbers, transformerFn2)
+fmt.Println(transformedNumbers)
+fmt.Println(moreTransformedNumbers)
+```
+
+### Anonymous functions
+- When we have a case where a function wants another function as parameter value, we can use anonymous functions
+- We can define a function when we need it rather than defining it in advance
+```go
+package main
+
+import "fmt"
+
+func main() {
+	numbers := []int{1, 2, 3}
+
+	transformed := transformNumbers(&numbers, func(num int) int {
+		return num * 2
+	})
+
+	fmt.Println(transformed)
+}
+
+func transformNumbers(numbers *[]int, transform func(int) int) []int {
+	dNumbers := []int{}
+
+	for _, val := range *numbers {
+		dNumbers = append(dNumbers, transform(val))
+	}
+
+	return dNumbers
+}
+
+```
+- This makes the code more readable
+
+### Understanding Closures
+- Closures also use anonymous functions
+- They use a specific aspect of anonymous function
+- Child scope can access parameters from the parent scope
+- Similar to javascript
+```go
+func createTransformer(factor int) func(int) int {
+	return func(number int) int {
+		return number * factor
+	}
+}
+
+//Usage
+double := createTransformer(2)
+triple := createTransformer(3)
+fmt.Println(double(4))
+fmt.Println(triple(5))
+
+doubled := transformNumbers(&numbers, double)
+fmt.Println(doubled)
+tripled := transformNumbers(&numbers, triple)
+fmt.Println(tripled)
+
+```
+- In Go, a closure is a function value that references variables from outside its own body. 
+- These functions can “close over” variables in their surrounding scope, which means they remember and can manipulate the values of those variables even after the surrounding function has exited. 
+- This is a powerful concept that allows for more dynamic and flexible programming
+```go
+package main
+
+import "fmt"
+
+func main() {
+    // Create a function that returns a closure
+    adder := func(start int) func(int) int {
+        sum := start
+        return func(x int) int {
+            sum += x
+            return sum
+        }
+    }
+
+    // Initialize the closure with a starting value
+    myAdder := adder(10)
+
+    // Use the closure
+    fmt.Println(myAdder(5))  // Output: 15
+    fmt.Println(myAdder(3))  // Output: 18
+    fmt.Println(myAdder(10)) // Output: 28
+}
+```
+- ![img_57.png](img_57.png)
+
+### Recursion
+- It is a function that calls itself
+- A good example can be a function that calculates factorial of a number
+```go
+func factorial(num int) int {
+	//exit condition
+	if num == 0 {
+		return 1
+	}
+	return num * factorial(num-1)
+}
+```
+### Using Variadic Functions
+- It is actually quite a simple concept
+- It is similar to params keyword in C#
+- It takes a list of numbers and converts it into a slice of the defined datatype for us automatically
+- Also it is like rest operator in javascript
+```go
+func main() {
+	//numbers := []int {1,10,15}
+	
+	sum := sumup(1,10,15)
+	fmt.Println(sum)
+}
+
+func sumup(numbers ...int) int {
+	sum := 0
+	for _, number := range numbers {
+		sum += number
+	}
+	return sum
+}
+```
+- ![img_58.png](img_58.png)
+- ![img_59.png](img_59.png)
+
+### Splitting slices into Parameter Values
+- We can use the spread operator here
+- If we have a slice of numbers, we can pass it to a variadic function by using the spread operator for the slice: numbers defined below
+```go
+func main() {
+	numbers := []int{1, 10, 15}
+	sum := sumup("testing", 2, numbers...)
+	fmt.Println(sum)
+}
+func sumup(prestarting string, startingValue int, numbers ...int) int {
+	fmt.Println(prestarting)
+	sum := startingValue
+	for _, number := range numbers {
+		sum += number
+	}
+	return sum
+}
+```
+
+## Project: Price Calculator
+- ![img_60.png](img_60.png)
+- ![img_61.png](img_61.png)
+
