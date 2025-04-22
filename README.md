@@ -2417,4 +2417,380 @@ func sumup(prestarting string, startingValue int, numbers ...int) int {
 ## Project: Price Calculator
 - ![img_60.png](img_60.png)
 - ![img_61.png](img_61.png)
+- In Go, when you access a struct field through a pointer, Go automatically dereferences the pointer for you
+- You don't need to manually dereference the struct. The language simplifies this for convenience. 
+- You can still explicitly dereference the pointer 
+- We have bufio package which can help us 
+- The bufio package in Go is used for buffered I/O operations, which improve efficiency when reading and writing data. It wraps around an io.Reader or io.Writer to provide buffering, reducing the number of direct system calls and improving performance.
+- Efficient File Reading/Writing: Allows reading and writing large files in chunks rather than one byte at a time.
+- Buffered Input Handling: Useful for handling input streams like user input or network connections more effectively
+- Passing a receiver pointer (*T) instead of a receiver struct (T) in Go is often necessary due to these key reasons:
+#### Mutability – Modify Struct Fields
+- When you pass a struct by value, Go creates a copy, meaning any modifications won't affect the original. 
+- Using a pointer receiver allows methods to change the original struct.
+```go
+package main
+
+import "fmt"
+
+type User struct {
+	Name string
+}
+
+// Method with value receiver (does NOT modify original struct)
+func (u User) UpdateName(newName string) {
+	u.Name = newName
+}
+
+// Method with pointer receiver (modifies original struct)
+func (u *User) UpdateNamePtr(newName string) {
+	u.Name = newName
+}
+
+func main() {
+	user := User{Name: "Alice"}
+
+	user.UpdateName("Bob")   // Value receiver—modifications lost
+	fmt.Println(user.Name)   // Output: Alice (no change)
+
+	user.UpdateNamePtr("Bob") // Pointer receiver—modifications persist
+	fmt.Println(user.Name)    // Output: Bob
+}
+```
+#### Efficiency – Avoiding Struct Copying
+- Passing large structs by value causes unnecessary copying, which wastes memory and CPU cycles. 
+- Using a pointer ensures only a reference is passed.
+```go
+type LargeStruct struct {
+Data [1000]int
+}
+
+// Using a pointer avoids copying 1000 integers
+func (ls *LargeStruct) ProcessData() {
+ls.Data[0] = 42 // Modify data directly
+}
+```
+
+#### Consistency – Pointer for All Methods
+- If some methods use a pointer receiver and others don’t, Go treats them differently—leading to unexpected behavior. 
+- Using only pointer receivers ensures consistency.
+
+#### We implemented this in our project like this
+```go
+package prices
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strconv"
+)
+
+type TaxIncludedPriceJob struct {
+	TaxRate           float64
+	InputPrices       []float64
+	TaxIncludedPrices map[string]float64
+}
+
+func (job *TaxIncludedPriceJob) Process() {
+	job.LoadData()
+	result := make(map[string]float64)
+	for _, price := range job.InputPrices {
+		result[fmt.Sprintf("%.2f", price)] = price * (1 + job.TaxRate)
+	}
+	fmt.Println(result)
+	//return result
+}
+
+// NewTaxIncludedPriceJob: Constructor Function
+// NewTaxIncludedPriceJob: In Go, when you access a struct field through a pointer, Go automatically dereferences the pointer for you
+func NewTaxIncludedPriceJob(taxRate float64) *TaxIncludedPriceJob {
+
+	return &TaxIncludedPriceJob{
+		TaxRate: taxRate,
+	}
+}
+
+func (job *TaxIncludedPriceJob) LoadData() {
+	file, err := os.Open("prices.txt")
+	if err != nil {
+		fmt.Println("Error loading prices.txt")
+		fmt.Println(err)
+		return
+	}
+
+	scanner := bufio.NewScanner(file)
+	lines := []string{}
+	for scanner.Scan() {
+		line := scanner.Text()
+		lines = append(lines, line)
+	}
+
+	err = scanner.Err()
+	if err != nil {
+		fmt.Println(err)
+		file.Close()
+		return
+	}
+
+	prices := make([]float64, len(lines))
+	for lineIndex, line := range lines {
+		floatPrice, err := strconv.ParseFloat(line, 64)
+		if err != nil {
+			fmt.Println(err)
+			file.Close()
+			return
+		}
+		prices[lineIndex] = floatPrice
+	}
+
+	//fmt.Println(job.InputPrices)
+	job.InputPrices = prices
+}
+
+```
+- We called this package from our main package as follows:
+```go
+package main
+
+import (
+	"examples.com/price-calculator-project/prices"
+)
+
+func main() {
+	taxRates := []float64{0, 0.07, 0.1, 0.15}
+
+	for _, taxRate := range taxRates {
+		priceJob := prices.NewTaxIncludedPriceJob(taxRate)
+		priceJob.Process()
+	}
+}
+
+```
+### Reading and Writing JSON to Files
+```go
+package filemanager
+
+import (
+	"bufio"
+	"encoding/json"
+	"errors"
+	"os"
+)
+
+func ReadLines(path string) ([]string, error) {
+	file, err := os.Open("prices.txt")
+	if err != nil {
+		return nil, errors.New("Error opening file: " + err.Error())
+	}
+
+	scanner := bufio.NewScanner(file)
+	lines := []string{}
+	for scanner.Scan() {
+		line := scanner.Text()
+		lines = append(lines, line)
+	}
+
+	err = scanner.Err()
+	if err != nil {
+		file.Close()
+		return nil, errors.New("Error scanning file: " + err.Error())
+	}
+
+	file.Close()
+	return lines, nil
+}
+
+func WriteJson(data interface{}, path string) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return errors.New("Error creating file: " + err.Error())
+	}
+
+	err = json.NewEncoder(file).Encode(data)
+	if err != nil {
+		file.Close()
+		return errors.New("Error encoding file: " + err.Error())
+	}
+
+	file.Close()
+	return nil
+}
+
+```
+
+- If we are outputting a result to JSON and we want to exclude some field from the struct, we use the "-" sign
+```go
+type TaxIncludedPriceJob struct {
+	TaxRate           float64                 `json:"tax_rate"`
+	InputPrices       []float64               `json:"input_prices"`
+	TaxIncludedPrices map[string]float64      `json:"tax_included_prices"`
+	IOManager         filemanager.FileManager `json:"-"`
+}
+```
+- In the above code, we are excluding the IO Manager
+
+### Working on a swappable struct
+- We can want to use more generic, more reusable code
+- This can be done by using interfaces
+- We can create a separate file called iomanager.go and have this code in there
+```go
+package iomanager
+
+type IOManager interface {
+	WriteResult(data interface{}) error
+	ReadLines() ([]string, error)
+}
+
+```
+- Note this file has the same method signatures are those found in commandManager.go file and fileManager.go file 
+- These files are as follows:
+- commandManager.go
+```go
+package cmdmanager
+
+import "fmt"
+
+type CMDManager struct {
+}
+
+func (cmd CMDManager) ReadLines() ([]string, error) {
+	fmt.Println("Please enter your prices, Confirm every price with enter")
+	var prices []string
+	for {
+		var price string
+		fmt.Print("Price: ")
+		fmt.Scan(&price)
+		if price == "0" {
+			break
+		}
+		prices = append(prices, price)
+	}
+	return prices, nil
+}
+
+func (cmd CMDManager) WriteResult(data interface{}) error {
+	fmt.Println(data)
+	return nil
+}
+
+func New() CMDManager {
+	return CMDManager{}
+}
+
+```
+- FileManager.go is as follows:
+```go
+package filemanager
+
+import (
+	"bufio"
+	"encoding/json"
+	"errors"
+	"os"
+)
+
+type FileManager struct {
+	InputFilePath  string
+	OutputFilePath string
+}
+
+func (fm *FileManager) ReadLines() ([]string, error) {
+	file, err := os.Open(fm.InputFilePath)
+	if err != nil {
+		return nil, errors.New("Error opening file: " + err.Error())
+	}
+
+	scanner := bufio.NewScanner(file)
+	lines := []string{}
+	for scanner.Scan() {
+		line := scanner.Text()
+		lines = append(lines, line)
+	}
+
+	err = scanner.Err()
+	if err != nil {
+		file.Close()
+		return nil, errors.New("Error scanning file: " + err.Error())
+	}
+
+	file.Close()
+	return lines, nil
+}
+
+func (fm *FileManager) WriteResult(data interface{}) error {
+	file, err := os.Create(fm.OutputFilePath)
+	if err != nil {
+		return errors.New("Error creating file: " + err.Error())
+	}
+
+	err = json.NewEncoder(file).Encode(data)
+	if err != nil {
+		file.Close()
+		return errors.New("Error encoding file: " + err.Error())
+	}
+
+	file.Close()
+	return nil
+}
+
+func New(inputFilePath string, outputFilePath string) *FileManager {
+	return &FileManager{
+		inputFilePath,
+		outputFilePath}
+}
+
+```
+- Next step is that in prices.go file, we need to use the generic interface: ioManager instead of fileManager struct
+```go
+type TaxIncludedPriceJob struct {
+	TaxRate           float64             `json:"tax_rate"`
+	InputPrices       []float64           `json:"input_prices"`
+	TaxIncludedPrices map[string]float64  `json:"tax_included_prices"`
+	IOManager         iomanager.IOManager `json:"-"`
+}
+
+//Modify the constructor also
+func NewTaxIncludedPriceJob(taxRate float64, fm iomanager.IOManager) *TaxIncludedPriceJob {
+
+return &TaxIncludedPriceJob{
+TaxRate:   taxRate,
+IOManager: fm,
+}
+}
+```
+- Now to swap them automatically we can do something like this in main.go file
+```go
+package main
+
+import (
+	"examples.com/price-calculator-project/filemanager"
+	"fmt"
+
+	//"examples.com/price-calculator-project/filemanager"
+	"examples.com/price-calculator-project/prices"
+	//"fmt"
+)
+
+func main() {
+	taxRates := []float64{0, 0.07, 0.1, 0.15}
+
+	for _, taxRate := range taxRates {
+		fm := filemanager.New("prices.txt", fmt.Sprintf("prices_%.0f.json", taxRate*100))
+		//cmdm := cmdmanager.New()
+		priceJob := prices.NewTaxIncludedPriceJob(taxRate, fm)
+		err := priceJob.Process()
+		if err != nil {
+			fmt.Println("Could not process price job")
+			fmt.Println(err)
+		}
+	}
+}
+
+```
+- As you can see interfaces are implemented implicitly in Go.
+- We can swap them out with either FileManager or Command Manager as and when we want
+- 
+
+
 
