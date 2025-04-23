@@ -2790,7 +2790,325 @@ func main() {
 ```
 - As you can see interfaces are implemented implicitly in Go.
 - We can swap them out with either FileManager or Command Manager as and when we want
-- 
 
+### Concurrency in Go
+- ![img_62.png](img_62.png)
+- ![img_63.png](img_63.png)
+- Lets say we have the following code:
+```go
+package main
 
+import (
+	"fmt"
+	"time"
+)
 
+func main() {
+	go Greet("Starting")
+	go slowGreet("Hello slow greet")
+	go Greet("Hello fast")
+}
+
+func slowGreet(phrase string) {
+	time.Sleep(3 * time.Second)
+	fmt.Println(phrase)
+}
+
+func Greet(phrase string) {
+	fmt.Println(phrase)
+}
+
+```
+- When we run the above code, nothing is printed on the screen
+- This is because go routines are dispatched instantly from the main function and the program exits without waiting for those functions to do their work
+
+### Channels in Go
+- This is basically a communication channel when working with go routines.
+- Think of channel in Go as a communication device, and it will transmit some kind of data
+- We can create a channel like this:
+```go
+done := make(chan bool)
+```
+- Then we will pass this channel to our function like this
+```go
+func slowGreet(phrase string, doneChan chan bool) {
+	time.Sleep(3 * time.Second)
+	fmt.Println(phrase)
+	//This arrow points in the direction of where data should flow
+	doneChan <- true
+}
+```
+- Then we will modify our main function code to wait for this doneChannel to be done
+```go
+func main() {
+
+	done := make(chan bool)
+	go slowGreet("Hello slow greet", done)
+	//We can either print the value emitted by this channel or let it flow into the void
+	<-done
+}
+```
+- Now if we run our code, the main function will wait till the value emitted by the doneChannel is true
+
+### Working with Multiple Channels and Go Routines
+- Take a look at this code
+```go
+func main() {
+	done := make(chan bool)
+	//We can pass this channel to different go routines
+	fmt.Println("Starting...")
+	go slowGreet("Hello slow greet", done)
+	go Greet("Hello fast", done)
+	<-done
+}
+
+func slowGreet(phrase string, doneChan chan bool) {
+	time.Sleep(3 * time.Second)
+	fmt.Println(phrase)
+	//This arrow points in the direction of where data should flow
+	doneChan <- true
+}
+
+func Greet(phrase string, doneChan chan bool) {
+	fmt.Println(phrase)
+	doneChan <- true
+}
+```
+- This will give unexpected results. The function that finishes first will output the value of "done" and program will exit
+- We can alter this by adding 2 done statements like this, but this is not ideal
+```go
+func main() {
+	done := make(chan bool)
+	//We can pass this channel to different go routines
+	fmt.Println("Starting...")
+	go slowGreet("Hello slow greet", done)
+	go Greet("Hello fast", done)
+	<-done
+	<-done
+}
+```
+- There is an alternative way of handling this
+```go
+func main() {
+	dones := make([]chan bool, 2)
+	//We can pass this channel to different go routines
+	dones[0] = make(chan bool)
+	fmt.Println("Starting...")
+	go slowGreet("Hello slow greet", dones[0])
+	dones[1] = make(chan bool)
+	go Greet("Hello fast", dones[1])
+	for _, done := range dones {
+		<-done
+	}
+}
+```
+- But managing such a slice of channels is cumbersome.
+- Go provides us a close() function which we can use to indicate that the channel is done
+- In the main method we can loop over the channel and make it wait till it is closed
+- Problem is now we need to know which go subroutine will take the longest and hence close the channel only there
+```go
+func main() {
+	done := make(chan bool)
+	//We can pass this channel to different go routines
+	fmt.Println("Starting...")
+	go slowGreet("Hello slow greet", done)
+	go Greet("Hello fast", done)
+
+	for range done {
+		//fmt.Println(doneChan)
+	}
+}
+
+func slowGreet(phrase string, doneChan chan bool) {
+time.Sleep(3 * time.Second)
+fmt.Println(phrase)
+//This arrow points in the direction of where data should flow
+doneChan <- true
+close(doneChan)
+}
+
+func Greet(phrase string, doneChan chan bool) {
+fmt.Println(phrase)
+doneChan <- true
+}
+```
+
+### Go Routines and Channels in a project
+- Note that go subroutines dont return any value
+- We will have to use channels if we want to transmit data
+- Remember the price calculator project where we were starting 4 for loops for 4 different taxRates and printing out the prices as files
+- That is a good candidate to use go subroutines
+- Lets assume we want to introduce a delay of 3 seconds while writing to JSON
+```go
+func (fm *FileManager) WriteResult(data interface{}) error {
+	file, err := os.Create(fm.OutputFilePath)
+	if err != nil {
+		return errors.New("Error creating file: " + err.Error())
+	}
+	time.Sleep(3 * time.Second)
+	err = json.NewEncoder(file).Encode(data)
+	if err != nil {
+		file.Close()
+		return errors.New("Error encoding file: " + err.Error())
+	}
+
+	file.Close()
+	return nil
+}
+```
+- Now we will run the Process Job as a go subroutine
+```go
+func main() {
+	taxRates := []float64{0, 0.07, 0.1, 0.15}
+	//Create a slice of channels
+	doneChans := make([]chan bool, len(taxRates))
+	for index, taxRate := range taxRates {
+		doneChans[index] = make(chan bool)
+		fm := filemanager.New("prices.txt", fmt.Sprintf("prices_%.0f.json", taxRate*100))
+		//cmdm := cmdmanager.New()
+		priceJob := prices.NewTaxIncludedPriceJob(taxRate, fm)
+		//err := priceJob.Process()
+		
+		//Pass the channel to each process
+		go priceJob.Process(doneChans[index])
+		//if err != nil {
+		//	fmt.Println("Could not process price job")
+		//	fmt.Println(err)
+		//}
+	}
+
+	//Wait for all the channels to be done
+	for _, doneChan := range doneChans {
+		<-doneChan
+	}
+}
+
+//Modify the Process Method to accept the channel parameter
+func (job *TaxIncludedPriceJob) Process(doneChan chan bool) {
+//First load the data inside Input Prices
+//Note we are passing pointers so that we work on the original job not on its copy
+err := job.LoadData()
+if err != nil {
+//return err
+}
+result := make(map[string]float64)
+for _, price := range job.InputPrices {
+taxIncludedPrice := price * (1 + job.TaxRate)
+result[fmt.Sprintf("%.2f", price)], _ = strconv.ParseFloat(fmt.Sprintf("%.2f", taxIncludedPrice), 64)
+}
+//fmt.Println(result)
+//return result
+//Write to a file
+job.TaxIncludedPrices = result
+job.IOManager.WriteResult(job)
+doneChan <- true
+}
+```
+
+### Setting up the Error Channel
+- We can setup an error channel to emit error just like done Channels earlier
+```go
+func (job *TaxIncludedPriceJob) Process(doneChan chan bool, errorChan chan error) {
+	//First load the data inside Input Prices
+	//Note we are passing pointers so that we work on the original job not on its copy
+	err := job.LoadData()
+	if err != nil {
+		//return err
+		errorChan <- err
+		return
+	}
+	result := make(map[string]float64)
+	for _, price := range job.InputPrices {
+		taxIncludedPrice := price * (1 + job.TaxRate)
+		result[fmt.Sprintf("%.2f", price)], _ = strconv.ParseFloat(fmt.Sprintf("%.2f", taxIncludedPrice), 64)
+	}
+	//fmt.Println(result)
+	//return result
+	//Write to a file
+	job.TaxIncludedPrices = result
+	job.IOManager.WriteResult(job)
+	doneChan <- true
+}
+```
+- We can modify our main.go like this
+```go
+func main() {
+	taxRates := []float64{0, 0.07, 0.1, 0.15}
+	doneChans := make([]chan bool, len(taxRates))
+	errorChans := make([]chan error, len(taxRates))
+	for index, taxRate := range taxRates {
+		doneChans[index] = make(chan bool)
+		errorChans[index] = make(chan error)
+		fm := filemanager.New("prices.txt", fmt.Sprintf("prices_%.0f.json", taxRate*100))
+		//cmdm := cmdmanager.New()
+		priceJob := prices.NewTaxIncludedPriceJob(taxRate, fm)
+		//err := priceJob.Process()
+		go priceJob.Process(doneChans[index], errorChans[index])
+		//if err != nil {
+		//	fmt.Println("Could not process price job")
+		//	fmt.Println(err)
+		//}
+	}
+
+	for _, errorChan := range errorChans {
+		<-errorChan
+	}
+
+	for _, doneChan := range doneChans {
+		<-doneChan
+	}
+
+}
+```
+- The above code will throw an ERROR though
+- This is because in most cases the error channel will never be used and program will keep waiting for the error to arrive
+- To solve this, Go provides another solution
+- Go has a special control structure called "select"
+- It is similar to switch statement
+- The idea behind the select statement is that we can define different cases for different channels
+- If one channel emits a value earlier, then that will be executed and, it will not wait for the other channel to also emit a value
+- So we can delete the 2 range loops defined earlier and replace it with this code
+```go
+for index, _ := range taxRates {
+		select {
+		case err := <-errorChans[index]:
+			if err != nil {
+				fmt.Println(err)
+			}
+		case <-doneChans[index]:
+			fmt.Println("Done")
+		}
+	}
+```
+### Defer Keyword
+- Defer is an important keyword when we have some operation, some function that must be called when the outer function is done like we have file.Close()
+- By using defer we can make sure that we don't forget it in some place, and we don't have to call it manually in multiple places
+```go
+func (fm *FileManager) ReadLines() ([]string, error) {
+	file, err := os.Open(fm.InputFilePath)
+	if err != nil {
+		return nil, errors.New("Error opening file: " + err.Error())
+	}
+
+	defer file.Close()
+	
+	scanner := bufio.NewScanner(file)
+	lines := []string{}
+	for scanner.Scan() {
+		line := scanner.Text()
+		lines = append(lines, line)
+	}
+
+	err = scanner.Err()
+	if err != nil {
+		//file.Close()
+		return nil, errors.New("Error scanning file: " + err.Error())
+	}
+
+	//file.Close()
+	return lines, nil
+}
+```
+## Building a REST API with Go
+- We will build a backend using Go Language
+- ![img_64.png](img_64.png)

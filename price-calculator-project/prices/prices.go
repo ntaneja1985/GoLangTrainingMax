@@ -14,12 +14,16 @@ type TaxIncludedPriceJob struct {
 	IOManager         iomanager.IOManager `json:"-"`
 }
 
-func (job *TaxIncludedPriceJob) Process() error {
+func (job *TaxIncludedPriceJob) Process(doneChan chan bool, errorChan chan error) {
 	//First load the data inside Input Prices
 	//Note we are passing pointers so that we work on the original job not on its copy
 	err := job.LoadData()
+
+	//errorChan <- errors.New("Error loading data")
 	if err != nil {
-		return err
+		//return err
+		errorChan <- err
+		return
 	}
 	result := make(map[string]float64)
 	for _, price := range job.InputPrices {
@@ -30,7 +34,8 @@ func (job *TaxIncludedPriceJob) Process() error {
 	//return result
 	//Write to a file
 	job.TaxIncludedPrices = result
-	return job.IOManager.WriteResult(job)
+	job.IOManager.WriteResult(job)
+	doneChan <- true
 }
 
 // NewTaxIncludedPriceJob: Constructor Function
