@@ -3112,3 +3112,1206 @@ func (fm *FileManager) ReadLines() ([]string, error) {
 ## Building a REST API with Go
 - We will build a backend using Go Language
 - ![img_64.png](img_64.png)
+- ![img_65.png](img_65.png)
+- ![img_69.png](img_69.png)
+- To handle incoming HTTP requests, we can make use of http package which is part of Go's standard library
+- This package provides utility functions which we can use to send HTTP requests as well as to handle incoming requests
+- However, for advanced functionality, we can make use of Gin package which is a third party package/library
+- Gin is a web framework written in Go
+- It is 40 times faster thanks to httpRouter. 
+- Gin provides middleware support, JSON validation, Route Grouping, Error management and is crash-free
+- To set up a REST API using GIN we need to integrate the following code
+- Here we first set up an HTTP server, then configure handlers for various routes
+- We can make use of the ginContext which is same as HTTP request to get the details of the incoming request
+- We can also return JSON response or HTML in response
+```go
+package main
+
+import (
+	"github.com/gin-gonic/gin"
+	"net/http"
+)
+
+func main() {
+	//Behind the scenes configures an HTTP server for us
+	//with Logger and Recovery middleware already attached
+	//Returns a handle(pointer) to the engine or the server
+	server := gin.Default()
+
+	//Register a handler with the Gin Engine
+	//First argument is the path to which request is sent
+	//This is similar to Minimal API we have .NET Core
+	//Second argument can be an anonymous function, or it can be a named function
+	server.GET("/events", getEvents) //GET,PUT,POST,PATCH,DELETE
+
+	//We can use the handle to run the server at port 8080
+	server.Run(":8080") //localhost:8080
+
+}
+
+// This function will have an argument/pointer to the Gin Context similar to HttpContext
+func getEvents(context *gin.Context) {
+	context.JSON(http.StatusOK, gin.H{"message": "Hello From Nishant"})
+}
+
+```
+- ![img_70.png](img_70.png)
+- ![img_71.png](img_71.png)
+
+### Setting up an Event Model
+- We will create a model package to store all the model data for the events 
+- We will also have a custom "Event" type of struct with functions to get and save Events
+```go
+package models
+
+import "time"
+
+type Event struct {
+	ID          int
+	Name        string
+	Description string
+	Location    string
+	DateTime    time.Time
+	UserID      int
+}
+
+var events = []Event{}
+
+func (e Event) Save() {
+	//later: add it to a database
+	events = append(events, e)
+}
+
+```
+### Creating an event
+- We will make use of gin context's Should Bind to JSON feature to connect our incoming post request to the Event
+```go
+func createEvent(context *gin.Context) {
+	var event models.Event
+	err := context.ShouldBindJSON(&event)
+	if err != nil {
+		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	event.ID = 1
+	event.UserID = 1
+	event.Save()
+	context.JSON(http.StatusCreated, gin.H{"message": "Event created", "event": event})
+}
+
+//We will create a handler like this in the main function as follows:
+server.POST("/events", createEvent)
+```
+- For API testing, we will create separate .http files for create-event and get-events like this
+```go
+POST localhost:8080/events
+content-type: application/json
+
+{
+"Name":"Test Event",
+"Description":"Some test event",
+"Location":"New Delhi",
+"DateTime" : "2025-01-01T15:30:00.000Z"
+}
+
+
+```
+- Similar to this we will create a get-events.http file like this
+```go
+GET localhost:8080/events
+```
+### Adding a SQL Database
+- Go's standard library has a sql package
+- But the sql package must be used in conjunction with a database driver.
+- Google search golang database drivers
+- We will use the go-sql-lite package
+- Run the following command:
+```shell
+go get github.com/mattn/go-sqlite3
+```
+- But we will not use it like this directly.
+- We will make use of database/sql package which is part of Go's library
+- We will setup a package db and have a file db.go and have the following code:
+```go
+package db
+
+import (
+	"database/sql"
+	_ "github.com/mattn/go-sqlite3"
+)
+
+// Globally, we will have a pointer to the database handler
+var DB *sql.DB
+
+// InitDB is used to make a connection to database
+func InitDB() {
+	var err error
+	DB, err = sql.Open("sqlite3", "api.db")
+	if err != nil {
+		panic("Could not connect to database")
+	}
+
+	//Configure connection pools to set up how many simultaneous open connections
+	//we want to the database
+	DB.SetMaxOpenConns(10)
+	DB.SetMaxIdleConns(5)
+}
+
+```
+
+### Creating a SQL Database Table
+- To create a sql database table, we need to run the following code and then call initDB from the main function in main.go
+```go
+package db
+
+import (
+	"database/sql"
+	_ "github.com/mattn/go-sqlite3"
+	//_ "modernc.org/sqlite"
+)
+
+// Globally, we will have a pointer to the database handler
+var DB *sql.DB
+
+// InitDB is used to make a connection to database
+func InitDB() {
+	var err error
+	DB, err = sql.Open("sqlite3", "api.db")
+	if err != nil {
+		panic("Could not connect to database")
+	}
+
+	// Test connection
+	if err = DB.Ping(); err != nil {
+		panic(err)
+	}
+
+	//Configure connection pools to set up how many simultaneous open connections
+	//we want to the database
+	DB.SetMaxOpenConns(10)
+	DB.SetMaxIdleConns(5)
+
+	//Create the Tables
+	createTables()
+}
+
+func createTables() {
+	createEventsTable := `
+CREATE TABLE IF NOT EXISTS events (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ name TEXT NOT NULL,
+ description TEXT NOT NULL,
+ location TEXT NOT NULL,
+ dateTime DATETIME NOT NULL,
+ user_id INTEGER
+)
+`
+
+	_, err := DB.Exec(createEventsTable)
+	if err != nil {
+		//fmt.Println("Could not create events table")
+		panic(err)
+	}
+}
+
+```
+- Remember if it doesnot work, we need to set CGO_ENABLED flag to 1 inside our system environment variables and restart Goland 
+
+### Storing Data in the Database
+- We will modify the Save Method here in events.go file
+- Earlier we were just appending events to a global variable
+- Now we will save it like this
+```go
+func (e Event) Save() error {
+	//Write a query to insert events in the events table created above
+	//The question marks are used to prevent sql-injection attacks
+	query := `INSERT INTO events (name,description,location,dateTime,user_id) 
+			  VALUES (?,?,?,?,?)`
+	
+	//Prepare the query
+	sqlQuery, err := db.DB.Prepare(query)
+	if err != nil {
+		return err
+	}
+    
+	defer sqlQuery.Close()
+	
+	//Execute the sql query
+	result, err := sqlQuery.Exec(e.Name, e.Description, e.Location, e.DateTime, e.UserID)
+	if err != nil {
+		return err
+	}
+	
+	//Get the last insert Id and this will be the event Id
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	e.ID = id
+
+	return nil
+}
+```
+
+### Getting Events from the database
+- We will write a query to fetch all events from the database
+```go
+func GetAllEvents() ([]Event, error) {
+	query := "SELECT * FROM events"
+	rows, err := db.DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var events []Event
+	for rows.Next() {
+		var event Event
+		err := rows.Scan(&event.ID, &event.Name, &event.Description, &event.Location, &event.DateTime, &event.UserID)
+		if err != nil {
+			return nil, err
+		}
+
+		events = append(events, event)
+	}
+
+	return events, nil
+}
+```
+- The function in main.go to get all events will also be modified like this
+```go
+func getEvents(context *gin.Context) {
+	events, err := models.GetAllEvents()
+
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{"message": err})
+		return
+	}
+	context.JSON(http.StatusOK, events)
+}
+```
+- Note in the above code, we are using db.DB.Query and not query.Exec() function
+- This is because Exec function is used when we want to modify something in the database
+- For all "select" related cases we can use db.DB.Query to run queries and fetch data from database
+
+#### Extra Info on Exec() vs Query()
+- In the previous lectures, we started sending SQL commands to the SQLite database.
+- And we did this by following different approaches:
+- DB.Exec() (when we created the tables)
+- Prepare() + stmt.Exec() (when we inserted data into the database)
+- DB.Query() (when we fetched data from the database)
+- Using Prepare() is 100% optional! 
+- You could send all your commands directly via Exec() or Query().
+- The difference between those two methods then just is whether you're fetching data from the database (=> use Query()) or your manipulating the database / data in the database (=> use Exec()).
+
+#### Why use Prepare()
+- Prepare() prepares a SQL statement - this can lead to better performance
+- If the same statement is executed multiple times (potentially with different data for its placeholders).
+- However, this is only true, if the prepared statement is not closed (stmt.Close()) in between those executions. 
+- In that case, there wouldn't be any advantages.
+- And, indeed, in this application, we are calling stmt.Close() directly after calling stmt.Exec(). 
+- So here, it really wouldn't matter which approach you're using.
+
+### Getting Single Event by ID
+- We will have the following code to return a single event:
+```go
+func GetEventById(id int64) (*Event, error) {
+	query := "SELECT * FROM events WHERE id=?"
+	row := db.DB.QueryRow(query, id)
+	var event Event
+	err := row.Scan(&event.ID, &event.Name, &event.Description, &event.Location, &event.DateTime, &event.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return &event, nil
+}
+```
+
+- In the main.go file we will define a GetEvent handler like this
+```go
+func getEvent(context *gin.Context) {
+	fmt.Println(context.Param("id"))
+	eventId, err := strconv.ParseInt(context.Param("id"), 10, 64)
+	if err != nil {
+		context.JSON(http.StatusBadRequest, gin.H{"message": err})
+		return
+	}
+
+	event, err := models.GetEventById(eventId)
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{"message": err})
+		return
+	}
+	context.JSON(http.StatusOK, gin.H{"message": event})
+}
+```
+
+### Refactoring Code and Outsourcing Routes
+- Our main.go file can become rather unwieldy with so many routes and handlers inside it
+- So we will create a separate package routes and have a file inside it events.go which will include all the handler functions
+- We will also create a Register Routes function inside the routes.go file like this
+```go
+package routes
+
+import "github.com/gin-gonic/gin"
+
+func RegisterRoutes(server *gin.Engine) {
+	//Register a handler with the Gin Engine
+	//First argument is the path to which request is sent
+	//This is similar to Minimal API we have .NET Core
+	//Second argument can be an anonymous function, or it can be a named function
+	server.GET("/events", getEvents) //GET,PUT,POST,PATCH,DELETE
+	server.POST("/events", createEvent)
+	server.GET("/events/:id", getEvent)
+}
+
+```
+- Finally, we can condense our main.go file as follows:
+```go
+package main
+
+import (
+	"example.com/rest-api/db"
+	"example.com/rest-api/routes"
+	"github.com/gin-gonic/gin"
+)
+
+func main() {
+
+	//Initialize the database
+	db.InitDB()
+	//Behind the scenes configures an HTTP server for us
+	//with Logger and Recovery middleware already attached
+	//Returns a handle(pointer) to the engine or the server
+	server := gin.Default()
+
+	//Register the Routes
+	routes.RegisterRoutes(server)
+
+	//We can use the handle to run the server at port 8080
+	server.Run(":8080") //localhost:8080
+
+}
+
+```
+### Updating Events
+- Refer to the following code:
+```go
+//Register the route in routes.go file first
+
+server.PUT("/events/:id", updateEvent)
+
+//Make handler method in events.go
+
+func updateEvent(context *gin.Context) {
+eventId, err := strconv.ParseInt(context.Param("id"), 10, 64)
+if err != nil {
+context.JSON(http.StatusBadRequest, gin.H{"message": err})
+return
+}
+
+event, err := models.GetEventById(eventId)
+if err != nil {
+context.JSON(http.StatusInternalServerError, gin.H{"message": err})
+return
+}
+
+var updatedEvent models.Event
+err = context.ShouldBindJSON(&updatedEvent)
+if err != nil {
+context.JSON(http.StatusBadRequest, gin.H{"message": err})
+}
+updatedEvent.ID = event.ID
+updatedEvent.UserID = event.UserID
+err = updatedEvent.Update()
+if err != nil {
+context.JSON(http.StatusInternalServerError, gin.H{"message": err})
+}
+context.JSON(http.StatusOK, gin.H{"message": "Event updated", "event": updatedEvent})
+}
+
+
+//Setup Update Method inside our data model file: event.go
+
+func (event Event) Update() error {
+query := `UPDATE events
+			  SET name=?,description=?,location=?,dateTime=?
+			  WHERE id=?`
+stmt, err := db.DB.Prepare(query)
+if err != nil {
+return err
+}
+defer stmt.Close()
+_, err = stmt.Exec(event.Name, event.Description, event.Location, event.DateTime, event.ID)
+if err != nil {
+return err
+}
+return nil
+}
+```
+### Deleting Events
+- Refer to the following code
+```go
+//Register the event in the routes
+
+server.DELETE("/events/:id", deleteEvent)
+
+//Setup a handler in events.go file
+
+func deleteEvent(context *gin.Context) {
+eventId, err := strconv.ParseInt(context.Param("id"), 10, 64)
+if err != nil {
+context.JSON(http.StatusBadRequest, gin.H{"message": err})
+}
+
+event, err := models.GetEventById(eventId)
+if err != nil {
+context.JSON(http.StatusInternalServerError, gin.H{"message": err})
+return
+}
+
+err = event.Delete()
+if err != nil {
+context.JSON(http.StatusInternalServerError, gin.H{"message": err})
+}
+context.JSON(http.StatusOK, gin.H{"message": "Event deleted", "event": event})
+}
+
+//Write the delete method inside the event.go file
+
+func (event Event) Delete() error {
+query := "DELETE FROM events WHERE id=?"
+stmt, err := db.DB.Prepare(query)
+if err != nil {
+return err
+}
+defer stmt.Close()
+_, err = stmt.Exec(event.ID)
+if err != nil {
+return err
+}
+return nil
+}
+```
+
+### Adding a User's table to the database
+- For this we will have to update the createTables() function in db.go file
+```go
+func createTables() {
+	createUserTable := `CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+)`
+
+	_, err := DB.Exec(createUserTable)
+	if err != nil {
+		//fmt.Println("Could not create users table")
+		panic(err)
+	}
+
+	createEventsTable := `
+CREATE TABLE IF NOT EXISTS events (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ name TEXT NOT NULL,
+ description TEXT NOT NULL,
+ location TEXT NOT NULL,
+ dateTime DATETIME NOT NULL,
+ user_id INTEGER
+FOREIGN KEY(user_id) REFERENCES users(id)
+)
+`
+
+	_, err = DB.Exec(createEventsTable)
+	if err != nil {
+		//fmt.Println("Could not create events table")
+		panic(err)
+	}
+}
+```
+- Note, as to how we have established references between user and events table
+- We will delete the existing database, and it will be recreated with the new table when the application starts next time
+- Now we will create methods for signup handlers and inserting users in the database
+- Add a file user.go to contain the code to save the user
+```go
+package models
+
+import "example.com/rest-api/db"
+
+type User struct {
+	ID       int64
+	Email    string `binding:"required"`
+	Password string `binding:"required"`
+}
+
+func (u User) Save() error {
+	query := `INSERT INTO users (email, password) VALUES ( ?, ?)`
+	stmt, err := db.DB.Prepare(query)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	result, err := stmt.Exec(u.Email, u.Password)
+	if err != nil {
+		return err
+	}
+	userId, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	u.ID = userId
+	return nil
+}
+
+```
+- We will now create a handler to handle the incoming signup request
+```go
+package routes
+
+import (
+	"example.com/rest-api/models"
+	"github.com/gin-gonic/gin"
+	"net/http"
+)
+
+func signup(context *gin.Context) {
+	var user models.User
+	err := context.ShouldBind(&user)
+	if err != nil {
+		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	}
+	err = user.Save()
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+	context.JSON(http.StatusCreated, gin.H{"message": "User created successfully!"})
+}
+
+```
+### Hashing the passwords
+- We will use the bcrypt package to hash the packages
+```shell
+go get -u golang.org/x/crypto
+
+```
+- We will create a utils package to hash the password
+```go
+package utils
+
+import "golang.org/x/crypto/bcrypt"
+
+func HashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
+	return string(bytes), err
+}
+
+```
+- Now we will use it inside the user's Save function
+```go
+func (u User) Save() error {
+	query := `INSERT INTO users (email, password) VALUES ( ?, ?)`
+	stmt, err := db.DB.Prepare(query)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	
+	//Hash the password
+	hashedPassword,err := utils.HashPassword(u.Password)
+	if err != nil {
+		return err
+	}
+	result, err := stmt.Exec(u.Email, hashedPassword)
+	if err != nil {
+		return err
+	}
+	userId, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	u.ID = userId
+	return nil
+}
+```
+
+### Getting started with Auth Tokens (JWT)
+- ![img_72.png](img_72.png)
+- Some routes can only be accessed by authenticated users
+- We will use Auth Token(JWT) to validate the users
+- This token is generated when the user logs in.
+- ![img_73.png](img_73.png)
+- We need to first check if the user can log in successfully
+- There is NO method in bcrypt that can help us convert our hashed password back into its original string
+- But it does provide a helper method where we can send in the password the user entered and compare it to the hashed password
+```go
+//Function in hash.go
+func CheckPasswordHash(password, hashedPassword string) bool {
+err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
+return err == nil
+}
+
+//Validate the user
+func (u User) ValidateCredentials() error {
+query := `SELECT password FROM users WHERE email = ?`
+row := db.DB.QueryRow(query, u.Email)
+var retrievedPassword string
+err := row.Scan(&retrievedPassword)
+if err != nil {
+return err
+}
+
+if !utils.CheckPasswordHash(u.Password, retrievedPassword) {
+return errors.New("Invalid password")
+}
+return nil
+}
+
+
+//Inside the users.go write the login method
+func login(context *gin.Context) {
+var user models.User
+err := context.ShouldBindJSON(&user)
+if err != nil {
+context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+return
+}
+
+err = user.ValidateCredentials()
+if err != nil {
+context.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+return
+}
+
+context.JSON(http.StatusOK, gin.H{"message": "User logged in successfully!"})
+}
+
+
+```
+- We can test it by creating a login-user.http file like this
+```go
+POST localhost:8080/login
+content-type: application/json
+
+{
+  "email":"ntaneja1@live.com",
+  "password":"testPass1"
+}
+```
+
+### Generating JWT
+- We will now work on generating the JWT token
+- We will use the golang-jwt package
+- We will get the following package
+```shell
+go get -u github.com/golang-jwt/jwt/v5
+```
+- We will add the following code to generate the JWT token
+```go
+package utils
+
+import (
+	"github.com/golang-jwt/jwt/v5"
+	"time"
+)
+
+func GenerateToken(email string, userId int64) (string, error) {
+	const secretKey = "super-secret-key"
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"email":  email,
+		"userId": userId,
+		"exp":    time.Now().Add(time.Hour * 2).Unix(),
+	})
+
+	return token.SignedString([]byte(secretKey))
+}
+
+```
+- We will then call this method within the login handler
+```go
+func login(context *gin.Context) {
+var user models.User
+err := context.ShouldBindJSON(&user)
+if err != nil {
+context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+return
+}
+
+err = user.ValidateCredentials()
+if err != nil {
+context.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+return
+}
+
+//After the user has successfully logged in, generate and send the token back
+token, err := utils.GenerateToken(user.Email, user.ID)
+if err != nil {
+context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+
+context.JSON(http.StatusOK, gin.H{"message": "User logged in successfully!", "token": token})
+}
+
+```
+- ![img_74.png](img_74.png)
+
+### Adding Token Verification and Route Protection
+- Now we will implement route protection using JWT Token
+- First we will add a Verify Token method in jwt.go file
+- This method takes the incoming token and verifies its signing signature and can even extract claims
+```go
+func VerifyToken(token string) error {
+	parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+		//Check if the token was really signed with the method used for signing
+		_, ok := token.Method.(*jwt.SigningMethodHMAC) //type checking syntax similar to reflection
+		if !ok {
+			return nil, errors.New("Unexpected signing method")
+		}
+		return []byte(secretKey), nil
+	})
+	if err != nil {
+		return errors.New("Could not parse token..")
+	}
+
+	tokenIsValid := parsedToken.Valid
+	if !tokenIsValid {
+		return errors.New("Invalid token")
+	}
+
+	//Extract the claims in the token
+	//claims, ok := parsedToken.Claims.(jwt.MapClaims)
+	//if !ok {
+	//	return errors.New("Invalid token claims")
+	//}
+	//
+	//email := claims["email"].(string)
+	//userId := claims["userId"].(int64)
+	return nil
+}
+```
+- For our create event method, we will add the additional step of token verification
+```go
+func createEvent(context *gin.Context) {
+	token := context.Request.Header.Get("Authorization")
+	if token == "" {
+		context.JSON(http.StatusUnauthorized, gin.H{"message": "No token found"})
+		return
+	}
+
+	//Verify the Token
+	err := utils.VerifyToken(token)
+	if err != nil {
+		context.JSON(http.StatusUnauthorized, gin.H{"message": err})
+		return
+	}
+	var event models.Event
+	err = context.ShouldBindJSON(&event)
+	if err != nil {
+		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	event.ID = 1
+	event.UserID = 1
+	err = event.Save()
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{"message": err})
+	}
+	context.JSON(http.StatusCreated, gin.H{"message": "Event created", "event": event})
+}
+```
+- Now if we make our POST request to create a event, we will need to pass a valid token or else it will return the status of Unauthorized
+```shell
+POST localhost:8080/events
+content-type: application/json
+authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im50YW5lamExQGxpdmUuY29tIiwiZXhwIjoxNzQ1NzkwMDMyLCJ1c2VySWQiOjB9.6sjM_UZxB3hD8GTAas4VQ9DodwcsdFOH2_I1we8zAho
+
+{
+  "Name":"Test Event 4",
+  "Description":"Some test event 4",
+  "Location":"Chandigarh4",
+  "DateTime" : "2025-01-01T19:30:00.000Z"
+}
+
+
+```
+
+### Retrieving and Storing User and Event IDs
+- Now we will extract the userId claim from the logged-in user's token and use it to populate the userId field of the event
+```go
+func VerifyToken(token string) (int64, error) {
+	parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+		//Check if the token was really signed with the method used for signing
+		_, ok := token.Method.(*jwt.SigningMethodHMAC) //type checking syntax similar to reflection
+		if !ok {
+			return nil, errors.New("Unexpected signing method")
+		}
+		return []byte(secretKey), nil
+	})
+	if err != nil {
+		return 0, errors.New("Could not parse token..")
+	}
+
+	tokenIsValid := parsedToken.Valid
+	if !tokenIsValid {
+		return 0, errors.New("Invalid token")
+	}
+
+	//Extract the claims in the token
+	claims, ok := parsedToken.Claims.(jwt.MapClaims)
+	if !ok {
+		return 0, errors.New("Invalid token claims")
+	}
+
+	userId := int64(claims["userId"].(float64))
+	return userId, nil
+}
+```
+- This will now be used in the CreateEvent method
+```go
+func createEvent(context *gin.Context) {
+	token := context.Request.Header.Get("Authorization")
+	if token == "" {
+		context.JSON(http.StatusUnauthorized, gin.H{"message": "No token found"})
+		return
+	}
+
+	//Verify the Token
+	userId, err := utils.VerifyToken(token)
+	if err != nil {
+		context.JSON(http.StatusUnauthorized, gin.H{"message": err})
+		return
+	}
+	var event models.Event
+	err = context.ShouldBindJSON(&event)
+	if err != nil {
+		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	//event.ID = 1
+	event.UserID = userId
+	err = event.Save()
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{"message": err})
+	}
+	context.JSON(http.StatusCreated, gin.H{"message": "Event created", "event": event})
+}
+```
+- As you can see rather than setting the ID of the event here, we now autopopulate it in the Save() method of the event
+```go
+func (e *Event) Save() error {
+	query := `INSERT INTO events (name,description,location,dateTime,user_id) 
+			  VALUES (?,?,?,?,?)`
+	//Query is stored in memory and easily reused
+	sqlQuery, err := db.DB.Prepare(query)
+	if err != nil {
+		return err
+	}
+
+	defer sqlQuery.Close()
+	//Exec query is used when we want to change something in the database
+	result, err := sqlQuery.Exec(e.Name, e.Description, e.Location, e.DateTime, e.UserID)
+	if err != nil {
+		return err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	
+	//Set the event Id and return it back
+	e.ID = id
+
+	return nil
+}
+```
+
+### Adding an Authentication Middleware
+- Instead of checking the token each time in each handler, we can just move the logic to validate the token into a middleware.
+- Middleware is a function that is executed before the handler is executed
+- We can create a middleware file called auth.go as follows:
+- Once the middleware is done executing, it calls the next() of the gin Context to execute the handler
+```go
+package middlewares
+
+import (
+	"example.com/rest-api/utils"
+	"github.com/gin-gonic/gin"
+	"net/http"
+)
+
+func Authenticate(context *gin.Context) {
+	token := context.Request.Header.Get("Authorization")
+	if token == "" {
+		context.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "No token found"})
+		return
+	}
+
+	//Verify the Token
+	userId, err := utils.VerifyToken(token)
+	if err != nil {
+		context.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": err})
+		return
+	}
+
+	//Attach data to the context, in this case the UserId
+	context.Set("userId", userId)
+
+	//Call the next method in the request pipeline
+	context.Next()
+}
+
+```
+- Now to use the middleware to protect a route we have 2 ways to add it
+- Here we can append as many middleware functions we want which will be executed from left to right
+- Also note we can extract the userId set in the middleware function in the create-events function like this
+```go
+//Fetch the userId from the context, more specifically the authentication middleware
+	userId := context.GetInt64("userId")
+```
+```go
+//Approach 1: Here the middlewares are executed from left to right
+server.POST("/events", middlewares.Authenticate, createEvent)
+```
+- However this approach is cumbersome as we may want to protect a group of routes
+- In this grouping, we add the routes and then execute a middleware function for each of these routes
+```go
+//Create a grouping of routes
+	authenticated := server.Group("/")
+	authenticated.Use(middlewares.Authenticate)
+	authenticated.POST("/events", middlewares.Authenticate, createEvent)
+	authenticated.PUT("/events/:id", updateEvent)
+	authenticated.DELETE("/events/:id", deleteEvent)
+```
+- Now we want test delete-event.http like this
+```shell
+DELETE localhost:8080/events/2
+authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im50YW5lamEzQGxpdmUuY29tIiwiZXhwIjoxNzQ1ODczMzIzLCJ1c2VySWQiOjN9.XC26cWQUq1NKp7ccQBQrz0abBv1w42aDZa0GfHkStik
+```
+- If we dont pass the authorization token, it will give a status of 401 unauthorized
+
+### Implementing Authorization
+- As we can see above, just authenticating the user is not enough.
+- We should make sure that he has the sufficient privileges to perform certain actions
+- Only users who created the event should be able to update or delete it
+- Since we are setting the userId extracted from the JWT token in the context, we can fetch it and compare it to the event's UserId
+```go
+func updateEvent(context *gin.Context) {
+eventId, err := strconv.ParseInt(context.Param("id"), 10, 64)
+if err != nil {
+context.JSON(http.StatusBadRequest, gin.H{"message": err})
+return
+}
+
+//Fetch the userId from the context, more specifically the authentication middleware
+userId := context.GetInt64("userId")
+
+event, err := models.GetEventById(eventId)
+if err != nil {
+context.JSON(http.StatusInternalServerError, gin.H{"message": err})
+return
+}
+
+//Ensure that only the user who created the event should be able to update the event
+if event.UserID != userId {
+context.JSON(http.StatusUnauthorized, gin.H{"message": "User does not have permission"})
+return
+}
+
+var updatedEvent models.Event
+err = context.ShouldBindJSON(&updatedEvent)
+if err != nil {
+context.JSON(http.StatusBadRequest, gin.H{"message": err})
+}
+updatedEvent.ID = event.ID
+updatedEvent.UserID = event.UserID
+err = updatedEvent.Update()
+if err != nil {
+context.JSON(http.StatusInternalServerError, gin.H{"message": err})
+}
+context.JSON(http.StatusOK, gin.H{"message": "Event updated", "event": updatedEvent})
+}
+
+func deleteEvent(context *gin.Context) {
+eventId, err := strconv.ParseInt(context.Param("id"), 10, 64)
+if err != nil {
+context.JSON(http.StatusBadRequest, gin.H{"message": err})
+}
+
+//Fetch the userId from the context, more specifically the authentication middleware
+userId := context.GetInt64("userId")
+
+event, err := models.GetEventById(eventId)
+if err != nil {
+context.JSON(http.StatusInternalServerError, gin.H{"message": err})
+return
+}
+
+//Ensure that only the user who created the event should be able to delete the event
+if event.UserID != userId {
+context.JSON(http.StatusUnauthorized, gin.H{"message": "User does not have permission"})
+return
+}
+
+err = event.Delete()
+if err != nil {
+context.JSON(http.StatusInternalServerError, gin.H{"message": err})
+}
+context.JSON(http.StatusOK, gin.H{"message": "Event deleted", "event": event})
+}
+```
+### Adding a Registrations Table
+- We can add a registrations table which is basically a mapping between userId and eventId like this
+```go
+func createTables() {
+	createUserTable := `CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL
+)`
+
+	_, err := DB.Exec(createUserTable)
+	if err != nil {
+		panic(err)
+	}
+
+	createEventsTable := `
+CREATE TABLE IF NOT EXISTS events (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ name TEXT NOT NULL,
+ description TEXT NOT NULL,
+ location TEXT NOT NULL,
+ dateTime DATETIME NOT NULL,
+ user_id INTEGER,
+FOREIGN KEY(user_id) REFERENCES users(id)
+)
+`
+
+	_, err = DB.Exec(createEventsTable)
+	if err != nil {
+		panic(err)
+	}
+
+	createRegistrationsTable := `
+CREATE TABLE IF NOT EXISTS registrations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    FOREIGN KEY(event_id) REFERENCES events(id),
+    FOREIGN KEY(user_id) REFERENCES users(id)
+)`
+
+	_, err = DB.Exec(createRegistrationsTable)
+	if err != nil {
+		panic(err)
+	}
+}
+```
+### Registering Users
+- So we have created a registration table above which contains a mapping between userId and eventId
+- We will now add a new route inside our routes.go inside the route group and then create a handler
+```go
+authenticated.POST("/events/:id/register", registerForEvent)     //Register for an event
+authenticated.DELETE("/events/:id/register", cancelRegistration) //Cancelling the registration
+```
+- Now we will add handlers for the same
+```go
+package routes
+
+import (
+	"example.com/rest-api/models"
+	"github.com/gin-gonic/gin"
+	"net/http"
+	"strconv"
+)
+
+func registerForEvent(context *gin.Context) {
+	eventId, err := strconv.ParseInt(context.Param("id"), 10, 64)
+	if err != nil {
+		context.JSON(http.StatusBadRequest, gin.H{"message": err})
+		return
+	}
+	event, err := models.GetEventById(eventId)
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{"message": err})
+		return
+	}
+
+	//Fetch the userId from the context, more specifically the authentication middleware
+	userId := context.GetInt64("userId")
+
+	//Register for the event
+	err = event.Register(userId)
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{"message": err})
+		return
+	}
+
+	context.JSON(http.StatusOK, gin.H{"message": "Registered Successfully"})
+}
+
+func cancelRegistration(context *gin.Context) {
+	eventId, err := strconv.ParseInt(context.Param("id"), 10, 64)
+	if err != nil {
+		context.JSON(http.StatusBadRequest, gin.H{"message": err})
+		return
+	}
+	event, err := models.GetEventById(eventId)
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{"message": err})
+		return
+	}
+	userId := context.GetInt64("userId")
+
+	err = event.CancelRegistration(userId)
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{"message": err})
+		return
+	}
+	context.JSON(http.StatusOK, gin.H{"message": "Cancelled Registration Successfully"})
+}
+```
+- We will also add methods inside the event.go file to register and de-register events in the database like this
+```go
+func (event *Event) Register(userId int64) error {
+	query := "INSERT INTO registrations(event_id, user_id) VALUES (?, ?)"
+	stmt, err := db.DB.Prepare(query)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	_, err = stmt.Exec(event.ID, userId)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (event *Event) CancelRegistration(userId int64) error {
+	query := "DELETE FROM registrations WHERE event_id= ? AND user_id= ?"
+	stmt, err := db.DB.Prepare(query)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	_, err = stmt.Exec(event.ID, userId)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+```
+- Now we can register and de-register events using the following http files
+```shell
+# Register for an event
+POST localhost:8080/events/2/register
+content-type: application/json
+authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im50YW5lamE0QGxpdmUuY29tIiwiZXhwIjoxNzQ1ODc1NDY3LCJ1c2VySWQiOjJ9.zUdNfhvMzw2aNoUne_IOmJTdNfRaF3M3yyow2y_MQFE
+
+# Cancel Registration for an event
+DELETE localhost:8080/events/2/register
+content-type: application/json
+authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im50YW5lamE0QGxpdmUuY29tIiwiZXhwIjoxNzQ1ODc1NDY3LCJ1c2VySWQiOjJ9.zUdNfhvMzw2aNoUne_IOmJTdNfRaF3M3yyow2y_MQFE
+```
+
